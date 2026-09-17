@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Для тебя</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #05050a;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas {
+    display: block;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  #btn {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%) translateY(30px);
+    padding: 12px 32px;
+    background: transparent;
+    border: 1px solid rgba(200, 160, 255, 0.6);
+    color: #d9b8ff;
+    font-family: 'Georgia', serif;
+    font-size: 15px;
+    letter-spacing: 1px;
+    border-radius: 40px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.5s ease, transform 1.5s ease, background 0.3s;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 10;
+  }
+  #btn.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #btn:active { transform: translateX(-50%) scale(0.96); }
+  #btn.hide { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="btn">Нажми когда дочитала</button>
+
+<script>
+(function() {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const btn = document.getElementById('btn');
+
+  let W, H, dpr;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', () => {
+    resize();
+    if (phase !== 'idle') buildTextStars();
+  });
+
+  let phase = 'idle';
+
+  const TEXT_1 = "Любимая, я очень рад тому, что могу уделять внимание и радовать тебя, даже когда мы оба сидим по домам. И мне правда важны твои чувства которые ты испытываешь в такие моменты, у меня у самого улыбка до ушей когда я тебе что то делаю и когда ты на это смотришь. И я так же хочу разделять с тобой не только хорошие моменты. Мы через многое прошли, и нам предстоит пройти еще очень много, и это будет не просто, но я хочу пройти весь этот путь от начала и до конца вместе с тобой, ведь ты всегда была и будешь моей единственной, и самой самой восхитительной.";
+
+  const TEXT_2 = "Рядом с тобой мое сердце бьется чаще. Я люблю тебя Кис";
+
+  // ========== ФОНОВЫЕ ЗВЁЗДЫ ==========
+  const BG_COUNT = 2000;
+  const bgStars = [];
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  class BgStar {
+    constructor() {
+      this.reset();
+      this.x = Math.random() * W;
+      this.y = Math.random() * H;
+    }
+    reset() {
+      // ИЗМЕНЕНО: 0.6–1.3
+      this.size = rand(0.6, 1.3);
+      this.baseAlpha = rand(0.2, 0.9);
+      this.alpha = this.baseAlpha;
+      this.twinklePhase = Math.random() * Math.PI * 2;
+      this.twinkleSpeed = rand(0.5, 1.5);
+      this.vx = rand(-0.15, 0.15);
+      this.vy = rand(-0.15, 0.15);
+      this.color = { r: 200, g: 160, b: 255 };
+      this.targetColor = { r: 200, g: 160, b: 255 };
+    }
+    update(dt, time) {
+      this.x += this.vx * dt * 60;
+      this.y += this.vy * dt * 60;
+      if (this.x < 0 || this.x > W) this.vx *= -1;
+      if (this.y < 0 || this.y > H) this.vy *= -1;
+      this.x = Math.max(0, Math.min(W, this.x));
+      this.y = Math.max(0, Math.min(H, this.y));
+      this.alpha = this.baseAlpha * (0.6 + 0.4 * Math.sin(time * this.twinkleSpeed + this.twinklePhase));
+      this.color.r += (this.targetColor.r - this.color.r) * 0.03 * dt * 60;
+      this.color.g += (this.targetColor.g - this.color.g) * 0.03 * dt * 60;
+      this.color.b += (this.targetColor.b - this.color.b) * 0.03 * dt * 60;
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${Math.round(this.color.r)}, ${Math.round(this.color.g)}, ${Math.round(this.color.b)}, ${this.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  for (let i = 0; i < BG_COUNT; i++) bgStars.push(new BgStar());
+
+  // ========== ТЕКСТ ==========
+  let textStars = [];
+  let textLinesCount = 0;
+  let textStartTime = 0;
+
+  function buildTextStars() {
+    const off = document.createElement('canvas');
+    off.width = W;
+    off.height = H;
+    const octx = off.getContext('2d');
+
+    const maxWidth = W * 0.88;
+    const maxHeight = H * 0.75;
+
+    let fontSize = Math.max(11, Math.min(W, H) * 0.028);
+    let lineHeight = fontSize * 1.5;
+
+    function wrapText(text, fs) {
+      octx.font = `bold ${fs}px Georgia, serif`;
+      const words = text.split(' ');
+      const lines = [];
+      let line = '';
+      for (const w of words) {
+        const test = line ? line + ' ' + w : w;
+        if (octx.measureText(test).width > maxWidth && line) {
+          lines.push(line);
+          line = w;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    let lines = wrapText(TEXT_1, fontSize);
+    while (lines.length * lineHeight > maxHeight && fontSize > 7) {
+      fontSize -= 0.5;
+      lineHeight = fontSize * 1.5;
+      lines = wrapText(TEXT_1, fontSize);
+    }
+
+    textLinesCount = lines.length;
+
+    const totalHeight = lines.length * lineHeight;
+    const startY = H / 2 - totalHeight / 2 + lineHeight / 2;
+
+    octx.font = `bold ${fontSize}px Georgia, serif`;
+    octx.fillStyle = '#fff';
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    lines.forEach((l, i) => octx.fillText(l, W / 2, startY + i * lineHeight));
+
+    const img = octx.getImageData(0, 0, W, H);
+    const data = img.data;
+
+    const step = 1;
+    textStars = [];
+    for (let y = 0; y < H; y += step) {
+      for (let x = 0; x < W; x += step) {
+        const idx = (y * W + x) * 4;
+        if (data[idx] > 100 && data[idx + 3] > 100) {
+          let lineIdx = 0;
+          for (let li = 0; li < lines.length; li++) {
+            const ly = startY + li * lineHeight;
+            if (Math.abs(y - ly) < lineHeight / 2) {
+              lineIdx = li;
+              break;
+            }
+          }
+          const sx = Math.random() * W;
+          const sy = Math.random() * H;
+          textStars.push({
+            x: sx,
+            y: sy,
+            tx: x,
+            ty: y,
+            size: rand(1.0, 1.7),
+            baseAlpha: 1,
+            alpha: 0,
+            lineIdx: lineIdx,
+            speed: rand(0.04, 0.08)
+          });
+        }
+      }
+    }
+  }
+
+  function updateTextStars(dt, time) {
+    const t = time - textStartTime;
+    const lineDelay = 0.4;
+    const lineDuration = 2.0;
+
+    let allDone = true;
+    for (const s of textStars) {
+      const lineStart = s.lineIdx * lineDelay;
+      const localT = Math.max(0, Math.min(1, (t - lineStart) / lineDuration));
+      if (localT < 1) allDone = false;
+      if (localT <= 0) continue;
+
+      s.x += (s.tx - s.x) * s.speed * dt * 60;
+      s.y += (s.ty - s.y) * s.speed * dt * 60;
+      s.alpha = s.baseAlpha * Math.min(1, localT * 3);
+    }
+    return allDone;
+  }
+
+  function drawTextStars() {
+    for (const s of textStars) {
+      if (s.alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(210, 165, 255, ${s.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ========== СЕРДЦЕ ==========
+  let heartStars = [];
+  let heartStartTime = 0;
+  let heartArrived = false;
+
+  function buildHeartStars() {
+    const cx = W / 2;
+    const cy = H / 2;
+    const scale = Math.min(W, H) * 0.022;
+    const count = 8000;
+
+    const targets = [];
+    for (let i = 0; i < count; i++) {
+      const t = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random());
+      const hx = 16 * Math.pow(Math.sin(t), 3);
+      const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      const px = cx + hx * scale * r;
+      const py = cy + hy * scale * r;
+      targets.push({ x: px, y: py });
+    }
+
+    heartStars = [];
+    for (let i = 0; i < count; i++) {
+      const s = textStars[i % textStars.length];
+      heartStars.push({
+        x: s ? s.x : Math.random() * W,
+        y: s ? s.y : Math.random() * H,
+        tx: targets[i].x,
+        ty: targets[i].y,
+        baseX: targets[i].x,
+        baseY: targets[i].y,
+        size: rand(1.0, 1.8),
+        alpha: 1,
+        speed: rand(0.03, 0.06),
+        floatPhase: Math.random() * Math.PI * 2,
+        floatSpeed: rand(0.5, 1.5),
+        floatRadius: rand(1.5, 3.5)
+      });
+    }
+    heartArrived = false;
+  }
+
+  function updateHeartStars(dt, time) {
+    const t = time - heartStartTime;
+    const duration = 2.5;
+    const progress = Math.min(1, t / duration);
+
+    let allArrived = true;
+    for (const s of heartStars) {
+      if (heartArrived) {
+        const angle = time * s.floatSpeed + s.floatPhase;
+        s.x = s.baseX + Math.cos(angle) * s.floatRadius;
+        s.y = s.baseY + Math.sin(angle * 1.3) * s.floatRadius;
+      } else {
+        s.x += (s.tx - s.x) * s.speed * dt * 60;
+        s.y += (s.ty - s.y) * s.speed * dt * 60;
+        const d = Math.hypot(s.x - s.tx, s.y - s.ty);
+        if (d > 2) allArrived = false;
+      }
+      s.alpha = Math.min(1, progress * 3);
+    }
+    heartArrived = allArrived;
+    return allArrived;
+  }
+
+  function drawHeartStars(time) {
+    const cx = W / 2;
+    const cy = H / 2;
+
+    const beatPeriod = 1.3;
+    const p = (time % beatPeriod) / beatPeriod;
+    let scale = 1;
+    if (p < 0.1) scale = 1 + 0.12 * Math.sin(p / 0.1 * Math.PI);
+    else if (p < 0.2) scale = 1 + 0.12 * Math.sin((p - 0.1) / 0.1 * Math.PI);
+    else if (p < 0.43) scale = 1;
+    else if (p < 0.53) scale = 1 + 0.12 * Math.sin((p - 0.43) / 0.1 * Math.PI);
+    else if (p < 0.63) scale = 1 + 0.12 * Math.sin((p - 0.53) / 0.1 * Math.PI);
+    else scale = 1;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+
+    // СЛОЙ СВЕЧЕНИЯ
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of heartStars) {
+      if (s.alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 30, 70, ${s.alpha * 0.15})`;
+      ctx.fill();
+    }
+
+    // ОСНОВНОЙ СЛОЙ
+    ctx.globalCompositeOperation = 'source-over';
+    for (const s of heartStars) {
+      if (s.alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 50, 90, ${s.alpha})`;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // ========== ПОДПИСЬ ==========
+  let signatureStars = [];
+  let signatureStartTime = 0;
+
+  function buildSignatureStars() {
+    const off = document.createElement('canvas');
+    off.width = W;
+    off.height = H;
+    const octx = off.getContext('2d');
+
+    const maxWidth = W * 0.85;
+    let fontSize = Math.max(12, Math.min(W, H) * 0.03);
+
+    function wrap(text, fs) {
+      octx.font = `bold ${fs}px Georgia, serif`;
+      const words = text.split(' ');
+      const lines = [];
+      let line = '';
+      for (const w of words) {
+        const t = line ? line + ' ' + w : w;
+        if (octx.measureText(t).width > maxWidth && line) {
+          lines.push(line);
+          line = w;
+        } else line = t;
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    let lines = wrap(TEXT_2, fontSize);
+    const lineHeight = fontSize * 1.4;
+    const startY = H * 0.9;
+
+    octx.font = `bold ${fontSize}px Georgia, serif`;
+    octx.fillStyle = '#fff';
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    lines.forEach((l, i) => octx.fillText(l, W / 2, startY + i * lineHeight));
+
+    const img = octx.getImageData(0, 0, W, H);
+    const data = img.data;
+    const step = 1;
+
+    signatureStars = [];
+    for (let y = 0; y < H; y += step) {
+      for (let x = 0; x < W; x += step) {
+        const idx = (y * W + x) * 4;
+        if (data[idx] > 100 && data[idx + 3] > 100) {
+          signatureStars.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            tx: x,
+            ty: y,
+            // ИЗМЕНЕНО: 0.7–1.4
+            size: rand(0.7, 1.4),
+            alpha: 0,
+            speed: rand(0.04, 0.08)
+          });
+        }
+      }
+    }
+  }
+
+  function updateSignatureStars(dt, time) {
+    const t = time - signatureStartTime;
+    const duration = 2.5;
+    const progress = Math.min(1, t / duration);
+    for (const s of signatureStars) {
+      s.x += (s.tx - s.x) * s.speed * dt * 60;
+      s.y += (s.ty - s.y) * s.speed * dt * 60;
+      s.alpha = Math.min(1, progress * 2);
+    }
+  }
+
+  function drawSignatureStars() {
+    for (const s of signatureStars) {
+      if (s.alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 210, 230, ${s.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ========== ЦИКЛ ==========
+  let lastTime = performance.now();
+  let startTime = lastTime;
+  let btnShown = false;
+
+  function loop(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    const time = (now - startTime) / 1000;
+
+    if (phase === 'idle' && time >= 3) {
+      phase = 'text';
+      buildTextStars();
+      textStartTime = time;
+    }
+
+    // ФОН
+    ctx.fillStyle = '#05050a';
+    ctx.fillRect(0, 0, W, H);
+
+    const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+    if (phase === 'heart' || phase === 'signature') {
+      grad.addColorStop(0, 'rgba(60, 10, 30, 0.4)');
+      grad.addColorStop(1, 'rgba(5, 5, 10, 0)');
+    } else {
+      grad.addColorStop(0, 'rgba(40, 20, 80, 0.35)');
+      grad.addColorStop(1, 'rgba(5, 5, 10, 0)');
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const s of bgStars) {
+      if (phase === 'heart' || phase === 'signature') {
+        s.targetColor = { r: 255, g: 50, b: 80 };
+      } else {
+        s.targetColor = { r: 200, g: 160, b: 255 };
+      }
+      s.update(dt, time);
+      s.draw();
+    }
+
+    // ТЕКСТ
+    if (phase === 'text') {
+      const allDone = updateTextStars(dt, time);
+      drawTextStars();
+      if (allDone && !btnShown && time - textStartTime > textLinesCount * 0.4 + 2.5) {
+        btn.classList.add('show');
+        btnShown = true;
+      }
+    }
+
+    // СЕРДЦЕ
+    if (phase === 'heart' || phase === 'signature') {
+      updateHeartStars(dt, time);
+      drawHeartStars(time);
+    }
+
+    // ПОДПИСЬ
+    if (phase === 'signature') {
+      updateSignatureStars(dt, time);
+      drawSignatureStars();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  btn.addEventListener('click', () => {
+    if (phase !== 'text') return;
+    phase = 'heart';
+    btn.classList.add('hide');
+    heartStartTime = (performance.now() - startTime) / 1000;
+    buildHeartStars();
+
+    setTimeout(() => {
+      phase = 'signature';
+      signatureStartTime = (performance.now() - startTime) / 1000;
+      buildSignatureStars();
+    }, 4000);
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
