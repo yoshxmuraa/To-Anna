@@ -95,7 +95,6 @@
       this.y = Math.random() * H;
     }
     reset() {
-      // ИЗМЕНЕНО: 0.6–1.3
       this.size = rand(0.6, 1.3);
       this.baseAlpha = rand(0.2, 0.9);
       this.alpha = this.baseAlpha;
@@ -140,9 +139,9 @@
     const octx = off.getContext('2d');
 
     const maxWidth = W * 0.88;
-    const maxHeight = H * 0.75;
+    const maxHeight = H * 0.7;
 
-    let fontSize = Math.max(11, Math.min(W, H) * 0.028);
+    let fontSize = Math.max(14, W * 0.042);
     let lineHeight = fontSize * 1.5;
 
     function wrapText(text, fs) {
@@ -164,7 +163,7 @@
     }
 
     let lines = wrapText(TEXT_1, fontSize);
-    while (lines.length * lineHeight > maxHeight && fontSize > 7) {
+    while (lines.length * lineHeight > maxHeight && fontSize > 8) {
       fontSize -= 0.5;
       lineHeight = fontSize * 1.5;
       lines = wrapText(TEXT_1, fontSize);
@@ -173,7 +172,8 @@
     textLinesCount = lines.length;
 
     const totalHeight = lines.length * lineHeight;
-    const startY = H / 2 - totalHeight / 2 + lineHeight / 2;
+    const centerY = H * 0.45;
+    const startY = centerY - totalHeight / 2 + lineHeight / 2;
 
     octx.font = `bold ${fontSize}px Georgia, serif`;
     octx.fillStyle = '#fff';
@@ -189,7 +189,7 @@
     for (let y = 0; y < H; y += step) {
       for (let x = 0; x < W; x += step) {
         const idx = (y * W + x) * 4;
-        if (data[idx] > 100 && data[idx + 3] > 100) {
+        if (data[idx] > 160 && data[idx + 3] > 160) {
           let lineIdx = 0;
           for (let li = 0; li < lines.length; li++) {
             const ly = startY + li * lineHeight;
@@ -205,7 +205,7 @@
             y: sy,
             tx: x,
             ty: y,
-            size: rand(1.0, 1.7),
+            size: rand(0.5, 1.0),
             baseAlpha: 1,
             alpha: 0,
             lineIdx: lineIdx,
@@ -252,38 +252,36 @@
 
   function buildHeartStars() {
     const cx = W / 2;
-    const cy = H / 2;
-    const scale = Math.min(W, H) * 0.022;
+    const cy = H * 0.45;
+    // ИЗМЕНЕНО: scale = W * 0.03 (в 2 раза меньше)
+    const scale = W * 0.03;
     const count = 8000;
 
-    const targets = [];
-    for (let i = 0; i < count; i++) {
-      const t = Math.random() * Math.PI * 2;
-      const r = Math.sqrt(Math.random());
-      const hx = 16 * Math.pow(Math.sin(t), 3);
-      const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-      const px = cx + hx * scale * r;
-      const py = cy + hy * scale * r;
-      targets.push({ x: px, y: py });
-    }
-
     heartStars = [];
+
     for (let i = 0; i < count; i++) {
-      const s = textStars[i % textStars.length];
-      heartStars.push({
-        x: s ? s.x : Math.random() * W,
-        y: s ? s.y : Math.random() * H,
-        tx: targets[i].x,
-        ty: targets[i].y,
-        baseX: targets[i].x,
-        baseY: targets[i].y,
-        size: rand(1.0, 1.8),
-        alpha: 1,
-        speed: rand(0.03, 0.06),
-        floatPhase: Math.random() * Math.PI * 2,
-        floatSpeed: rand(0.5, 1.5),
-        floatRadius: rand(1.5, 3.5)
-      });
+        const t = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random());
+        const hx = 16 * Math.pow(Math.sin(t), 3) * r;
+        const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
+        const targetX = cx + hx * scale;
+        const targetY = cy + hy * scale;
+
+        const s = textStars[i % textStars.length];
+        heartStars.push({
+            x: s ? s.x : Math.random() * W,
+            y: s ? s.y : Math.random() * H,
+            tx: targetX,
+            ty: targetY,
+            baseX: targetX,
+            baseY: targetY,
+            size: rand(1.0, 1.8),
+            alpha: 1,
+            speed: rand(0.03, 0.06),
+            floatPhase: Math.random() * Math.PI * 2,
+            floatSpeed: rand(0.5, 1.5),
+            floatRadius: rand(1.5, 3.5)
+        });
     }
     heartArrived = false;
   }
@@ -313,7 +311,7 @@
 
   function drawHeartStars(time) {
     const cx = W / 2;
-    const cy = H / 2;
+    const cy = H * 0.45;
 
     const beatPeriod = 1.3;
     const p = (time % beatPeriod) / beatPeriod;
@@ -330,7 +328,7 @@
     ctx.scale(scale, scale);
     ctx.translate(-cx, -cy);
 
-    // СЛОЙ СВЕЧЕНИЯ
+    // Слой свечения
     ctx.globalCompositeOperation = 'lighter';
     for (const s of heartStars) {
       if (s.alpha <= 0) continue;
@@ -340,7 +338,7 @@
       ctx.fill();
     }
 
-    // ОСНОВНОЙ СЛОЙ
+    // Основной слой
     ctx.globalCompositeOperation = 'source-over';
     for (const s of heartStars) {
       if (s.alpha <= 0) continue;
@@ -363,8 +361,9 @@
     off.height = H;
     const octx = off.getContext('2d');
 
-    const maxWidth = W * 0.85;
-    let fontSize = Math.max(12, Math.min(W, H) * 0.03);
+    const maxWidth = W * 0.9;
+    // ИЗМЕНЕНО: fontSize = W * 0.05 (крупнее)
+    let fontSize = Math.max(16, W * 0.05);
 
     function wrap(text, fs) {
       octx.font = `bold ${fs}px Georgia, serif`;
@@ -384,7 +383,8 @@
 
     let lines = wrap(TEXT_2, fontSize);
     const lineHeight = fontSize * 1.4;
-    const startY = H * 0.9;
+    const totalHeight = lines.length * lineHeight;
+    const startY = H - totalHeight - H * 0.05;
 
     octx.font = `bold ${fontSize}px Georgia, serif`;
     octx.fillStyle = '#fff';
@@ -400,14 +400,13 @@
     for (let y = 0; y < H; y += step) {
       for (let x = 0; x < W; x += step) {
         const idx = (y * W + x) * 4;
-        if (data[idx] > 100 && data[idx + 3] > 100) {
+        if (data[idx] > 160 && data[idx + 3] > 160) {
           signatureStars.push({
             x: Math.random() * W,
             y: Math.random() * H,
             tx: x,
             ty: y,
-            // ИЗМЕНЕНО: 0.7–1.4
-            size: rand(0.7, 1.4),
+            size: rand(0.6, 1.2),
             alpha: 0,
             speed: rand(0.04, 0.08)
           });
@@ -457,7 +456,7 @@
     ctx.fillStyle = '#05050a';
     ctx.fillRect(0, 0, W, H);
 
-    const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+    const grad = ctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.7);
     if (phase === 'heart' || phase === 'signature') {
       grad.addColorStop(0, 'rgba(60, 10, 30, 0.4)');
       grad.addColorStop(1, 'rgba(5, 5, 10, 0)');
